@@ -1,0 +1,232 @@
+#include<WiFi.h>
+#include<PubSubClient.h>
+#include <dummy.h>
+#include <HardwareSerial.h>  
+#define Lora_AT 32
+TaskHandle_t xLoratask;
+WiFiClient espClient;
+PubSubClient client(espClient);
+unsigned long NewTime;
+unsigned long LorataskOldtime;
+//const char* ssid ="BWSINNOVATION";const char*password =  "Passw0rd-PRF1";const char*mqttServer = "192.168.1.100";
+const char* ssid ="hxppc";const char*password =  "33355577";const char*mqttServer = "192.168.191.1";
+//const char* ssid ="BWSCCZRF01";const char*password ="";const char*mqttServer = "10.88.30.7";
+
+const int mqttPort =1883;const char*mqttUser = "user";const char*mqttPassword = "admin";
+
+void wifi_connect();
+void mqtt_connect();
+void mqtt_reconnect();
+void wifi_reconnect();
+void Lora_peizhi();
+void WatchDog(void *pvParameters);
+void LoraReceive(void *pvParameters);
+void LoraSend(void *pvParameters);
+HardwareSerial MySerial(1);
+boolean Loratask=false;
+char enddata=0x00;
+void setup()
+{
+  Serial.begin(9600);
+  MySerial.begin(9600, SERIAL_8N1, 16, 17);
+  pinMode(Lora_AT, OUTPUT); 
+  Lora_peizhi();
+  LorataskOldtime=millis();
+  wifi_connect();
+  mqtt_connect();
+   xTaskCreatePinnedToCore(
+    WatchDog,
+    "watchdog",   // A name just for humans
+    1024,  // This stack size can be checked & adjusted by reading the Stack Highwater
+    NULL,
+    2,  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL ,
+    0 
+  );
+    xTaskCreatePinnedToCore(
+    LoraSend,
+    "lora_send",   // A name just for humans
+    2048,  // This stack size can be checked & adjusted by reading the Stack Highwater
+    NULL,
+    3,  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL ,
+    0 
+  );
+  xTaskCreatePinnedToCore(
+   LoraReceive,
+    "LoraReceive",   // A name just for humans
+   4096,  // This stack size can be checked & adjusted by reading the Stack Highwater
+    NULL,
+    2,  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+   &xLoratask ,
+    1 
+  );
+   Loratask=true;
+ }
+
+void loop()
+{
+  //程序运行与进程中
+  } 
+void LoraReceive(void *pvParameters)  // This is a task.
+{ 
+  String taskMessage = "LoraReceive  running in core ";
+  taskMessage = taskMessage + xPortGetCoreID();
+  Serial.println(taskMessage); 
+  char Lora_receive[100];  
+  char msg[100];  
+  while(true)
+  { 
+    LorataskOldtime=millis();
+      if(MySerial.available()){
+      Serial.print("lora_Receive... ");
+      for(int i=0;i<100;i++){
+      Lora_receive[i]=MySerial.read(); 
+      vTaskDelay(1);  
+      }
+      wifi_reconnect();
+      mqtt_reconnect();
+      snprintf (msg,22,"%s",Lora_receive);
+      client.publish("FRFCh_distancesumtest",msg);
+       Serial.println("rec:");
+      Serial.print(msg);
+      Serial.println("is");
+      delay(500);      
+   }
+  
+}
+}
+
+void WatchDog(void *pvParameters)  // This is a task.
+{ 
+  String taskMessage = "LoraReceive running in core ";
+  taskMessage = taskMessage + xPortGetCoreID();
+  Serial.println(taskMessage); 
+  
+  while(true)
+  {
+   NewTime=millis();  
+   if (NewTime-LorataskOldtime>30000) 
+      {
+        if(Loratask==true)
+        {
+       vTaskDelete(xLoratask);
+       Loratask=false; 
+        }
+               
+      }
+    else if(Loratask==false)
+    {
+       xTaskCreatePinnedToCore(
+          LoraReceive,
+          "LoraReceive",   // A name just for humans
+          4096,  // This stack size can be checked & adjusted by reading the Stack Highwater
+          NULL,
+          2,  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+          &xLoratask ,
+          1
+        );
+         Loratask=true;    
+    }
+    delay(50);
+    
+   } 
+}
+
+ void LoraSend(void *pvParameters)  // This is a task.
+{ 
+  String taskMessage = "LoraSend running in core ";
+  taskMessage = taskMessage + xPortGetCoreID();
+  Serial.println(taskMessage); 
+  char Lora_Send[100];  
+  while(true)
+  {
+    MySerial.write("YYY");
+    Serial.println("YY");
+    vTaskDelay(3000);       
+   } 
+}
+void Lora_peizhi(){
+   digitalWrite(Lora_AT,HIGH);
+   delay(1000);
+   MySerial.write("AT\r\n");
+   delay(300);
+   MySerial.write("AT+TSF=08\r\n");
+   delay(300);
+   MySerial.write("AT+RSF=08\r\n");
+   delay(300);
+   MySerial.write("AT+NET=00\r\n");
+   delay(300);
+   MySerial.write("AT+TFREQ=1C12E3C0\r\n");//471mhz
+   //MySerial.write("AT+TFREQ=19CF0E40\r\n");//433mhz
+   delay(300);
+   MySerial.write("AT+RFREQ=19CF0E40\r\n");//433mhz
+   delay(300);
+   MySerial.write("AT+RIQ=00\r\n");
+   delay(300);
+   MySerial.write("AT+AK=11223344556677889900112233445566\r\n");//配置加密秘钥
+   delay(300);
+   digitalWrite(Lora_AT,LOW);
+   delay(3000);
+  }
+  
+void wifi_connect(){
+ 
+  while (WiFi.status()!= WL_CONNECTED) {
+
+   Serial.println("Connectingto hxx");
+    WiFi.begin(ssid,password);
+  delay(3000);
+  }
+
+  Serial.println("Connectedto the WiFi net-1.30");
+  Serial.println(WiFi.localIP());
+  }
+  
+void mqtt_connect(){
+
+  client.setServer(mqttServer,mqttPort);
+   
+    while (!client.connected()){
+     Serial.println("connecting mqtt");
+    if (client.connect("lora_re",mqttUser,mqttPassword)) {
+     Serial.println("mqtt connected... ");
+    }else {
+      Serial.print("connectfaile,state ");
+      Serial.print(client.state());
+      wifi_reconnect();
+      delay(2000);
+    }
+   } 
+  }
+  
+  void wifi_reconnect()
+  {    
+    while (WiFi.status() != WL_CONNECTED){
+        WiFi.begin(ssid,password);
+        delay(3000);       
+          }
+    Serial.println(WiFi.localIP());
+   }  
+    
+    void mqtt_reconnect()
+  {     
+    while (!client.connected()){    
+    Serial.println("connecting mqtt.");
+    client.setServer(mqttServer,mqttPort);
+    if (client.connect("lora_re",mqttUser,mqttPassword)) 
+    {
+       Serial.println("mqtt connected.");
+     }
+    else 
+    {
+      Serial.print("connectfaile,state  ");
+      Serial.print(client.state());   
+      wifi_reconnect();
+      delay(2000);
+    }
+   }
+ }
+
+
+
