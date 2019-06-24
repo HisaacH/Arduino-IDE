@@ -1,0 +1,132 @@
+#define client_name "L911"
+#include<MQTT.h>
+#include <HardwareSerial.h>
+HardwareSerial MySerial(1);
+
+
+char RFID[50];char rfid1[50];char rfid_zhuanyi[17];char rfid2[14];char old_rfid[14];
+char RFID1[3];char msg[20];char msg1[30];
+
+int datanew=0;int read_available=0;int rssi_count;long rssi;int light=0;int light1=0;
+void rfidread();void shujuchuli();void zifuzhuanyi();void mqttoutput(); void xiaochuchongfu();
+
+void setup() {   
+  pinMode(25, OUTPUT);pinMode(26, OUTPUT);
+  Serial.begin(115200);
+  wifi_connect(); mqtt_connect();
+  MySerial.begin(115200, SERIAL_8N1, 16, 17);
+
+ }
+
+void loop() { 
+rfidread();
+
+delay(1);
+if(rssi_count==500)
+{     
+      if(light==0){digitalWrite(25, HIGH);light=1;}
+      else {digitalWrite(25, LOW);light=0;}
+      
+      wifi_reconnect();
+      mqtt_reconnect();
+      
+      delay(1);
+      rssi= WiFi.RSSI();
+      snprintf (msg,20, "{\"L911_rssi\":%d}",rssi);
+      client.publish("L911_rssi",msg);
+      rssi_count=0;
+}
+
+rssi_count++;
+
+if(read_available==1&&RFID[1]=='C'){
+shujuchuli();
+zifuzhuanyi();
+xiaochuchongfu();
+mqttoutput();
+}
+
+
+}
+void rfidread(){
+
+ 
+   while(MySerial.available()){
+    read_available=1;
+    for(int i=0;i<50;i++)
+    RFID[i]=MySerial.read(); 
+    delay(1);
+    }
+    }
+    
+void shujuchuli(){
+ int j=0; int i;
+  if(light1==0){digitalWrite(26, HIGH);light1=1;}
+      else {digitalWrite(26, LOW);light1=0;} 
+ for (i=7;i<=38;i++){
+    rfid1[j]=RFID[i];
+    j++;
+ }
+ 
+ Serial.print(RFID);Serial.print("    ");
+ Serial.println(rfid1);
+ delay(5);
+ read_available=0;
+  } 
+  void zifuzhuanyi(){
+    int y;
+    for(int i=0;i<=31;i=i+2){
+      rfid1[i]=(rfid1[i]-48)*16;
+     
+      if(rfid1[i+1]<58)
+       rfid1[i+1]=rfid1[i+1]-48;
+       else 
+       rfid1[i+1]=rfid1[i+1]-55;
+       rfid_zhuanyi[y]=rfid1[i]+rfid1[i+1];
+       y=y+1;
+      }     
+      rfid2[5]=rfid_zhuanyi[8];rfid2[6]=rfid_zhuanyi[9];rfid2[7]=rfid_zhuanyi[10];rfid2[8]=rfid_zhuanyi[11];
+      rfid2[9]=rfid_zhuanyi[12];rfid2[10]=rfid_zhuanyi[13];rfid2[11]=rfid_zhuanyi[14];rfid2[12]=rfid_zhuanyi[15];
+      
+      RFID1[0]=rfid_zhuanyi[5];RFID1[1]=rfid_zhuanyi[6];RFID1[2]=rfid_zhuanyi[7];
+  
+      Serial.print(rfid2);Serial.print("   ");
+  }
+  
+  void xiaochuchongfu(){
+    for (int i=5;i<14;i++){
+      if(rfid2[i]!=old_rfid[i])
+        datanew=1;
+        }
+  
+    for (int i=5;i<13;i++){
+    if((rfid2[i]<48||rfid2[i]>90)||(rfid2[i]>57&&rfid2[i]<65))
+    datanew=0;
+    }
+    Serial.print("fanwei:"); Serial.println(datanew);  Serial.print("   ");
+    if(datanew==1){
+      for (int i=0;i<16;i++)
+      old_rfid[i]=rfid2[i];
+      }
+     else
+     Serial.print("old_data"); Serial.print("   ");
+     }
+
+void mqttoutput(){
+ 
+ rfid2[0]='L';rfid2[1]='9';rfid2[2]='1';rfid2[3]='1';rfid2[4]='_';
+  if(datanew==1){
+    if(RFID1[0]=='C'&&RFID1[1]=='I'){
+      delay(5);
+       wifi_reconnect();
+       mqtt_reconnect();
+      Serial.print(rfid2);Serial.println("SEND   ");
+
+    delay(5);
+    snprintf (msg1,30, "\"RFID_L911\":\"%s\"}",rfid2);
+  client.publish("RFID_L911",msg1);
+  }
+  datanew=0;
+  }
+  }
+  
