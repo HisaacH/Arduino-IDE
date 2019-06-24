@@ -1,0 +1,174 @@
+#include<WiFi.h> //
+#include<PubSubClient.h>   //MQTT
+#include <MAX6675_Thermocouple.h> //
+#include <dummy.h>
+#include <Arduino.h>
+#include "Adafruit_SHT31.h"
+#define client_name "sth30"
+
+#include <MQTT.h>
+
+void sht31_output();void sht311_find();
+
+char msg[50];char msg1[50];char msg2[50];char msg3[50];char msg4[50];char ff[4];
+int p=0,re=0,Y=0;
+float b,t1,t2,t3,tt1,tt2;
+MAX6675_Thermocouple* thermocouple = NULL;
+char msg5[50];float b1;
+
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
+#define SCK_PIN 14
+#define CS_PIN  15
+#define SO_PIN  34
+
+#define vee 12
+#define e 32
+#define s0 33
+#define s1 25
+#define s2 26
+
+#define l 27
+#define r 16
+#define g 17
+#define y 18
+
+#define READINGS_NUMBER  10
+#define DELAY_TIME  100
+void setup() {
+    Serial.begin(115200);
+    pinMode(r, OUTPUT);    pinMode(g, OUTPUT);    pinMode(y, OUTPUT); pinMode(l, OUTPUT); 
+    pinMode(vee, OUTPUT);  pinMode(s0, OUTPUT);   pinMode(s1, OUTPUT); 
+    pinMode(s2, OUTPUT);   digitalWrite(e, LOW);  digitalWrite(vee, LOW); 
+     thermocouple = new MAX6675_Thermocouple(
+    SCK_PIN, CS_PIN, SO_PIN,
+    READINGS_NUMBER, DELAY_TIME
+  );
+    wifi_connect();mqtt_connect();
+  
+  sht31_find();
+
+  ff[0]=0xff;ff[1]=0xff;ff[2]=0xff;
+  }
+
+void loop(){
+
+    char c[5];
+  const double celsius = thermocouple->readCelsius();
+  String a=String(celsius);
+  c[0]=a[0];c[1]=a[1];c[2]=a[2];c[3]=a[3];c[4]=a[4];
+   b1=atof(c);
+    b1=b1-2;
+//Serial.print("Temperature: ");
+//Serial.print(String(celsius) + " C, ");
+ // snprintf (msg5,75, "t18.txt=\"%.2f\"%s",b,ff);
+  //Serial.write(msg);
+  Serial.println(b);
+ 
+Serial.println('8');
+ Serial.println('6'); wifi_reconnect();
+  Serial.println('7');mqtt_reconnect();
+  sht31_output();
+  }
+void sht31_find(){
+    while (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
+    sht31.begin(0x44);
+    Serial.println("Couldn't find SHT31");
+    delay(1000);        
+    }}
+
+  
+void sht31_output(){
+  Serial.println('5'); choice();Serial.println('1'); 
+ //float value=temperature();
+ t2=b1;
+  snprintf (msg,75, "{\"tem0\":%.2f,\"tem1\":%.2f,\"tem2\":%.2f}",t1,t2,t3);
+  wifi_reconnect();mqtt_reconnect();
+  
+  client.publish("FRFCh_ME_OastTemp",msg);Serial.println("send"); 
+  Serial.println('2'); 
+  
+  //if(t1<45||t1>52){snprintf (msg,75, "\"tem0\":%.2f}",t1);client.publish("FRFCh_ME_OastTempWarning",msg); }
+  //if(t2<45||t2>52){snprintf (msg,75, "\"tem1\":%.2f}",t2);client.publish("FRFCh_ME_OastTempWarning",msg); }
+  delay(100);
+  Serial.println('3'); 
+  tt1=zhizhenchuli(t1);
+  tt2=zhizhenchuli(t2);
+
+  Serial.println('4'); 
+ 
+  jingbao();
+      
+ 
+ snprintf (msg1,75, "t0.txt=\"%.1f\"%s",t2,ff);
+ snprintf (msg2,75, "t1.txt=\"%.1f\"%s",t1,ff);
+ snprintf (msg3,75, "z0.val=%.0f%s",tt2,ff);
+ snprintf (msg4,75, "z1.val=%.0f%s",tt1,ff);
+ delay(50);
+ Serial.write(msg3); Serial.write(msg3);Serial.write(msg4); 
+ Serial.write(msg1); Serial.write(msg2); 
+
+ delay(100);
+ p=p+1;
+  } 
+
+
+
+ float zhizhenchuli(float b){
+   if( b>0&&b<22.5) {
+    b=365-(b*0.666666);
+  }
+  else if(b>=22.5&&b<=36.75) {
+    b=(b-22.5)*0.666666; 
+    }
+  else if(b>=36.75&&b<=45) {
+    b=(b-22.5)*0.666666; 
+    }
+
+  else if( b>45&&b<46){
+    b=(b-45)*10+15;
+    }
+    else if (b>=46&&b<49.8){
+    b=(b-46)*26+25;
+   }
+ else if (b>=49.8&&b<51){
+    b=(b-46)*26+25; 
+ }
+  else if (b>=51&&b<52){
+    b=(b-51)*10+155;
+ }
+  else if (b>=52&&b<97){
+    b=(b-52)*0.666666+165; 
+ }
+ return b;
+  }
+ 
+ 
+ 
+ 
+ 
+ void choice(){ 
+  Serial.println('d');digitalWrite(s0, LOW);digitalWrite(s1, LOW); digitalWrite(s2, LOW); Serial.println('9'); delay(50);t1 = sht31.readTemperature();delay(50); 
+  
+ Serial.println('f');digitalWrite(s0, HIGH);digitalWrite(s1, LOW);digitalWrite(s2, LOW); Serial.println("10"); delay(50);t3 = sht31.readTemperature();delay(50); Serial.println(t3);
+
+ // Serial.println('g');digitalWrite(s0, LOW);digitalWrite(s1, HIGH);digitalWrite(s2, LOW);  Serial.println('a'); delay(200);t3 = sht31.readTemperature();delay(200);
+  }
+ 
+
+
+
+void jingbao(){  
+    if((t1>20&&t1<27)&&(t2>20&&t2<27)){
+    digitalWrite(g,HIGH);digitalWrite(y,LOW);digitalWrite(r,LOW);}
+    
+    else if ((t1<18||t1>30)||(t2<18||t2>30)){
+       //re=re+1;
+       //if(re>3){
+      digitalWrite(r, HIGH);digitalWrite(y, LOW);digitalWrite(g, LOW);
+      //digitalWrite(l, HIGH);
+     // if(ll==1){re=0;digitalWrite(l, LOW);digitalWrite(r, LOW);digitalWrite(y, LOW);digitalWrite(g, HIGH);}
+               }
+    
+   else if( ( (t1>27&&t1<30)||(t1>18&&t1<20) )||((t2>27&&t2<30)||(t2>18&&t2<20))){
+      digitalWrite(y, HIGH);digitalWrite(g, LOW);digitalWrite(r, LOW);}
+ }
